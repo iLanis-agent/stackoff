@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StackOff - Stacked discount calculator</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; background:#171a22; color:#eaeef7; line-height:1.5; }
+  .wrap { max-width:640px; margin:0 auto; padding:26px 18px 60px; }
+  a { color:#ff7a8a; } h1 { font-size:28px; } h1 span { color:#ff7a8a; } .sub { color:#98a2b8; margin:4px 0 18px; }
+  .card { background:#212633; border-radius:14px; padding:16px; margin-bottom:14px; }
+  label { display:block; font-size:13px; color:#98a2b8; margin:10px 0 4px; }
+  input { width:100%; padding:11px; border-radius:9px; border:1px solid #3d465c; background:#171a22; color:#eaeef7; font-size:16px; font-family:inherit; }
+  input.bad { border-color:#e0746a; }
+  .row { display:flex; gap:10px; } .row > div { flex:1; }
+  .big { font-size:46px; font-weight:800; color:#ff7a8a; } .lbl { font-size:13px; color:#98a2b8; }
+  .grid { display:flex; gap:12px; flex-wrap:wrap; margin-top:12px; } .grid > div { flex:1; min-width:130px; background:#171a22; border-radius:10px; padding:10px; } .grid b { display:block; font-size:20px; }
+  table { width:100%; border-collapse:collapse; margin-top:8px; } td, th { padding:8px 4px; border-top:1px solid #313a4e; font-size:14px; text-align:right; } th { color:#98a2b8; font-weight:600; } td:first-child, th:first-child { text-align:left; }
+  .note { font-size:14px; color:#d3dae8; margin-top:10px; } h2 { font-size:17px; margin-bottom:8px; } .small { font-size:13px; color:#98a2b8; }
+  .win { color:#7be3a6; font-weight:700; }
+  .warn { background:#3d2a20; border:1px solid #b9703f; color:#ffddc4; padding:12px; border-radius:10px; margin-top:12px; font-size:14px; }
+  button { padding:9px 14px; border-radius:9px; border:1px solid #3d465c; background:#171a22; color:#eaeef7; font-size:14px; cursor:pointer; margin:8px 6px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Stack<span>Off</span></h1>
+  <div class="sub">30% off plus an extra 20% off is not 50% off. See what you really pay.</div>
+  <div class="card">
+    <div class="row"><div><label for="price">Original price ($)</label><input id="price" inputmode="decimal" value="100"></div><div><label for="disc">Discounts in order (%), comma separated</label><input id="disc" value="30, 20"></div></div>
+  </div>
+  <div class="card" id="out"></div>
+  <div class="card">
+    <h2>Two offers, which is better?</h2>
+    <div class="row"><div><label for="da">Offer A (%)</label><input id="da" value="40"></div><div><label for="db">Offer B (%)</label><input id="db" value="30, 15"></div></div>
+    <div class="note" id="cmp"></div>
+  </div>
+  <div class="card">
+    <h2>Undo a percent change</h2>
+    <div class="row"><div><label for="ch">A price changed by (%)</label><input id="ch" value="-50"></div></div>
+    <div class="note" id="undo"></div>
+  </div>
+  <div class="card"><h2>About this</h2><div class="small">Each discount applies to the already reduced price, so the remaining fractions multiply: final = price x (1 - d1) x (1 - d2) ... Checked against published examples, such as successive discounts of 10% and 20% equal one 28% discount (<a href="https://testbook.com/question-answer/two-successive-discounts-of-10-and-20-are-equiva--5b01ae825d847251cd9a528e">example</a>). Order does not change the result. Tax and fees are not included; some stores take coupons off the original price instead, so check how your coupon applies. Runs in your browser.</div></div>
+</div>
+<script src="engine.js"></script>
+<script>
+var $ = function (i) { return document.getElementById(i); };
+function list(id) { var parts = $(id).value.split(/[,\s]+/).filter(Boolean), ok = parts.length > 0 && parts.every(function (p) { return /^\d*\.?\d+$/.test(p) && +p <= 100; }); $(id).className = ok ? '' : 'bad'; return ok ? parts.map(Number) : null; }
+function num(id, allowNeg) { var v = $(id).value.trim(), ok = (allowNeg ? /^-?\d*\.?\d+$/ : /^\d*\.?\d+$/).test(v); $(id).className = ok ? '' : 'bad'; return ok ? parseFloat(v) : null; }
+function render() {
+  var p = num('price'), d = list('disc');
+  if (p == null || p <= 0 || !d) { $('out').innerHTML = '<div class="warn" id="err">Enter a price above 0 and discounts from 0 to 100, like 30, 20.</div>'; }
+  else {
+    var r = Off.stack(p, d), h = '<div class="lbl">You pay</div><div class="big" id="final">' + Off.money(r.final) + '</div><div class="grid"><div><span class="lbl">Real discount</span><b id="eff">' + Off.pct(r.effective) + '</b></div><div><span class="lbl">You save</span><b>' + Off.money(r.saved) + '</b></div><div><span class="lbl">Adding them up says</span><b id="naive">' + Off.pct(r.naive) + '</b></div></div>';
+    if (d.length > 1 && Math.abs(r.naive - r.effective) > 0.005) h += '<div class="note" id="gap">The stack is ' + Off.pct(r.naive - r.effective) + ' less generous than adding the percentages.</div>';
+    h += '<table id="steps"><tr><th>Step</th><th>Before</th><th>Off</th><th>After</th></tr>'; r.steps.forEach(function (s) { h += '<tr><td>' + Off.pct(s.pct) + ' off</td><td>' + Off.money(s.before) + '</td><td>-' + Off.money(s.saved) + '</td><td>' + Off.money(s.after) + '</td></tr>'; }); h += '</table>';
+    $('out').innerHTML = h;
+  }
+  var a = list('da'), b = list('db'), base = p || 100;
+  if (a && b) { var w = Off.better(base, a, b), fa = Off.stack(base, a), fb = Off.stack(base, b); $('cmp').innerHTML = 'A is ' + Off.pct(fa.effective) + ' off, B is ' + Off.pct(fb.effective) + ' off. ' + (w === 'tie' ? '<span class="win" id="win">They are the same.</span>' : '<span class="win" id="win">Offer ' + w + ' is cheaper.</span>'); } else $('cmp').textContent = 'Enter percentages like 40 or 30, 15.';
+  var c = num('ch', true); $('undo').innerHTML = c == null || c <= -100 ? 'Enter a change above -100, like -50.' : 'To get back to the original price you need a <b id="undoval">' + (Off.undo(c) > 0 ? '+' : '') + Off.pct(Off.undo(c)) + '</b> change.';
+}
+['price', 'disc', 'da', 'db', 'ch'].forEach(function (id) { $(id).oninput = render; });
+render();
+</script>
+</body>
+</html>
